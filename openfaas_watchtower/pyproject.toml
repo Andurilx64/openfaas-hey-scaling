@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "openfaas_watchtower"
+version = "0.1.0"
+description = "Watch tower for scaling an openfaas function based on latency."
+authors = ["Andurilx64 <alessandro.eugeni1@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.2"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
