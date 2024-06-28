@@ -4,6 +4,7 @@ import subprocess
 import re
 import json
 import logging
+from math import ceil
 from threading import Thread
 from time import sleep
 from queue import Queue
@@ -16,22 +17,44 @@ from openfaas_watchtower.const import (
     SCALE_DOWN_ROUNDS,
     TOLERANCE,
     NAME,
+    LOG_LEVEL,
+    SCALE_DOWN_INCREMENT,
+    SCALE_UP_INCREMENT,
 )
 
+
+LOG_MAPPING = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+    "CRITICAL": logging.CRITICAL,
+}
 
 queue = Queue()
 deq = deque(maxlen=max(SCALE_DOWN_ROUNDS, SCALE_UP_ROUNDS))
 logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+    level=LOG_MAPPING[LOG_LEVEL], format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 # pylint: disable=logging-fstring-interpolation
 
 
-def run_hey(url, requests=1, concurrency=1):
+def run_hey(url, requests=3, concurrency=3):
     """Runs the hey check for latency of the function"""
-    command = ["hey", "-n", str(requests), "-c", str(concurrency), "-t", "3", url]
+    command = [
+        "hey",
+        "-n",
+        str(requests),
+        "-c",
+        str(concurrency),
+        "-H",
+        "Hey: hey",
+        "-t",
+        "3",
+        url,
+    ]
 
     try:
         # Execute the command
@@ -41,7 +64,7 @@ def run_hey(url, requests=1, concurrency=1):
         stdout = results.stdout
         # stderr = result.stderr
 
-        out = parse_output(stdout)
+        out = parse_output(stdout, requests)
         if out:
             logger.debug(f"Latency: {out}")
             queue.put_nowait(out)
@@ -53,7 +76,7 @@ def run_hey(url, requests=1, concurrency=1):
         # return None
 
 
-def parse_output(stdout):
+def parse_output(stdout, requests=3):
     """Parsing of the hey output"""
 
     patterns = {
@@ -64,11 +87,17 @@ def parse_output(stdout):
         "requests_per_sec": r"Requests/sec:\s+([\d.]+)",
         "total_data": r"Total data:\s+(\d+) bytes",
         "size_per_request": r"Size/request:\s+(\d+) bytes",
+        "status code": r"\[200\]\s+(\d+)\s+responses",
+        "responses": r"(\d+)",
     }
 
     match = re.search(patterns["average"], stdout)
+    code = re.search(patterns["status code"], stdout)
+    num = re.search(patterns["responses"], str(code.group(1)))
     if not match:
         return None
+    if not num or int(num.group(1)) != requests:
+        logger.warning("Some response not 200 ok")
     return float(match.group(1))
 
 
@@ -89,61 +118,6 @@ def get_replicas(deployment_name, namespace="openfaas-fn"):
         return replicas
     except subprocess.CalledProcessError:
         return None
-
-
-class Pipeline:
-    """Define a processing pipeline"""
-
-    def __init__(self):
-        self.steps = []
-        self.queue = deque(maxlen=5)
-
-    def add_step(self, step):
-        """Adds a step to the pipeline"""
-        self.steps.append(step)
-
-    def run(self, input_data):
-        """Runs the pipeline"""
-        data = (input_data, self.queue)
-        for step in self.steps:
-            data = step(data)
-            if not data:
-                return None
-        return data
-
-
-def step1(data):
-    """Hey check"""
-    # Run the hey test
-    url = data[0]
-    return run_hey(url), data[1]
-
-
-def step2(data):
-    """Parsing"""
-    stdout = data[0]
-    if stdout is None:
-        return None
-    return parse_output(stdout), data[1]
-
-
-def step3(data):
-    """Verify that latency is under the target"""
-    latency = data[0]
-    if latency > TARGET:
-        pass
-    replicas = get_replicas("ftest")
-    print(f"Current replicas {replicas}")
-    return latency, data[1]
-
-
-def create_pipeline():
-    """Create and returns the pipeline"""
-    pipeline = Pipeline()
-    pipeline.add_step(step1)
-    pipeline.add_step(step2)
-    pipeline.add_step(step3)
-    return pipeline
 
 
 def run_hey_continuos():
@@ -209,7 +183,8 @@ def check_latency(data: dict):
                 msg = "Fail to scale up"
     else:
         msg = "Nothing to do"
-    logger.debug(msg)
+    msg += ": " + str(get_replicas(NAME)) + " replicas"
+    logger.info(msg)
     return (counter_up, counter_down)
 
 
@@ -218,10 +193,10 @@ def try_scale_down():
 
     replicas = get_replicas(NAME)
     if replicas == 1:
-        # can't zero scaling in openfaas free!
-        return True
+        # can't zero scaling in openfaas community-edition!
+        return False
 
-    req_replicas = replicas - 1
+    req_replicas = scale_down_repl_calc(replicas)
     req_replicas_str = "--replicas=" + str(req_replicas)
     deployment = "deployment/" + NAME
     cmd = ["kubectl", "scale", req_replicas_str, deployment, "-n", "openfaas-fn"]
@@ -244,11 +219,11 @@ def try_scale_up():
     """Tries to scale up replicas with kubectl"""
 
     replicas = get_replicas(NAME)
-    if replicas == 1:
-        # can't zero scaling in openfaas free!
-        return True
+    if replicas == 5:
+        # can't scale over 5 in openfaas community-edition!
+        return False
 
-    req_replicas = replicas + 1
+    req_replicas = scale_up_repl_calc(replicas)
     req_replicas_str = "--replicas=" + str(req_replicas)
     deployment = "deployment/" + NAME
     cmd = ["kubectl", "scale", req_replicas_str, deployment, "-n", "openfaas-fn"]
@@ -265,3 +240,21 @@ def try_scale_up():
         logger.error("Something went wrong")
         return False
     return True
+
+
+def scale_down_repl_calc(current_repl: int):
+    """Calculates the number of replicas required"""
+
+    next_repl = ceil(current_repl - (current_repl * SCALE_DOWN_INCREMENT))
+    if next_repl < 1:
+        return 1
+    return next_repl
+
+
+def scale_up_repl_calc(current_repl: int):
+    """Calculates the number of replicas required"""
+
+    next_repl = ceil(current_repl + (current_repl * SCALE_UP_INCREMENT))
+    if next_repl > 5:
+        return 5
+    return next_repl

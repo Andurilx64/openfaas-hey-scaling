@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openfaas_watchtower"
-version = "0.1.0"
+version = "0.1.1"
 description = "Watch tower for scaling an openfaas function based on latency."
 authors = ["Andurilx64 <alessandro.eugeni1@gmail.com>"]
 
