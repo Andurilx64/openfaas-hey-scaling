@@ -13,6 +13,12 @@ kubectl scale deployment alertmanager --replicas=0 -n openfaas
 
 **Note**: scale out the alert manager stop the alarming service for all the Openfaas functions, not just the one monitored by the watch tower, be careful.  
 
+With super-fast functions, scale up the number of replicas of the fucntion usually does not lead to a reduced latency: this is due to  a race condition. Scale up the OpenFaas Queue Worker is recommended:
+
+```bash
+kubectl scale deployment queue-worker --replicas=2 -n openfaas
+```
+
 To avoid that every invocation of the funtion for monitoring purpose is too much expensive, use this pattern:
 
 1. In your target function fetch the http headers
@@ -63,7 +69,7 @@ URL = "http://localhost:8080/function/ftest"
 TOLERANCE = 0.2
 
 # Target latency (ms)
-TARGET = 100
+TARGET = 75
 
 # Stabilization window scale up (rounds)
 SCALE_UP_ROUNDS = 2
@@ -88,7 +94,7 @@ LOG_LEVEL = "DEBUG"
 
 The software is tested with a simple custum function that returns the factiorial of a given number (named _ftest_), using the `python3-http-debian` template, from Openfaas template store.
 
-To simulate some sort of load, hey is used again:
+To simulate some sort of load (quite heavt in this case), hey is used again (two distinct terminals run this generator):
 
 ```bash
 hey -z 2m -c 50 -q 5  http://localhost:8080/function/ftest?number=50
@@ -98,50 +104,97 @@ The output summary of the hey call is pasted below.
 
 ```text
 Summary:  
-  Total:	120.1224 secs  
-  Slowest:	1.8184 secs  
-  Fastest:	0.0122 secs  
-  Average:	0.1106 secs  
-  Requests/sec:	244.4173  
+  Total:	121.7041 secs  
+  Slowest:	0.6253 secs  
+  Fastest:	0.0103 secs  
+  Average:	0.0659 secs  
+  Requests/sec:	236.5410   
   
-  Total data:	2231360 bytes  
+  Total data:	2187888 bytes  
   Size/request:	76 bytes  
 
 Response time histogram:  
-  0.012 [1]	|  
-  0.193 [26647]	|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■  
-  0.373 [2413]	|■■■■  
-  0.554 [199]	|  
-  0.735 [56]	|  
-  0.915 [6]	|  
-  1.096 [9]	|  
-  1.277 [13]	|  
-  1.457 [13]	|  
-  1.638 [2]	|  
-  1.818 [1]	|  
+  0.010 [1]	|  
+  0.072 [19446]	|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■  
+  0.133 [7999]	|■■■■■■■■■■■■■■■■  
+  0.195 [1203]	|■■  
+  0.256 [92]	|  
+  0.318 [10]	|  
+  0.379 [22]	|  
+  0.441 [7]	|  
+  0.502 [1]	|  
+  0.564 [6]	|  
+  0.625 [1]	|  
 
 
 Latency distribution:  
-  10% in 0.0491 secs  
-  25% in 0.0671 secs  
-  50% in 0.0941 secs  
-  75% in 0.1261 secs  
-  90% in 0.1866 secs  
-  95% in 0.2390 secs  
-  99% in 0.3781 secs  
-  
+  10% in 0.0304 secs  
+  25% in 0.0430 secs  
+  50% in 0.0593 secs  
+  75% in 0.0811 secs  
+  90% in 0.1092 secs  
+  95% in 0.1312 secs  
+  99% in 0.1752 secs  
+
 Details (average, fastest, slowest):  
-  DNS+dialup:	0.0000 secs, 0.0122 secs, 1.8184 secs  
-  DNS-lookup:	0.0000 secs, -0.0000 secs, 0.0047 secs  
-  req write:	0.0000 secs, 0.0000 secs, 0.0159 secs  
-  resp wait:	0.1105 secs, 0.0122 secs, 1.8183 secs  
-  resp read:	0.0001 secs, -0.0000 secs, 0.0138 secs  
+  DNS+dialup:	0.0000 secs, 0.0103 secs, 0.6253 secs  
+  DNS-lookup:	0.0000 secs, 0.0000 secs, 0.0186 secs  
+  req write:	0.0000 secs, 0.0000 secs, 0.0270 secs  
+  resp wait:	0.0657 secs, 0.0102 secs, 0.6120 secs  
+  resp read:	0.0001 secs, -0.0000 secs, 0.0299 secs  
   
 Status code distribution:  
-  [200]	29360 responsens  
+  [200]	28788 responses  
 ```
 
-The _ftest_ fucntion correctly scales up during the load (up to limit of 5 replicas :smiley:), and scales down after the hey execution.
+The _ftest_ fucntion correctly scales up during the load (up to limit of 5 replicas :smiley:), and scales down after the hey execution. The average response time is below our targer latency (75)! 
+
+The same test was replicated, this time with the default Openfaas Cummunity Edition Autoscaler, with the results listed below.
+
+```text
+Summary:  
+  Total:	120.0989 secs  
+  Slowest:	0.5995 secs  
+  Fastest:	0.0084 secs  
+  Average:	0.0645 secs  
+  Requests/sec:	248.1621  
+  
+  Total data:	2265104 bytes  
+  Size/request:	76 bytes  
+
+Response time histogram:  
+  0.008 [1]	|  
+  0.067 [18113]	|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■  
+  0.127 [10490]	|■■■■■■■■■■■■■■■■■■■■■■■  
+  0.186 [995]	|■■  
+  0.245 [124]	|  
+  0.304 [35]	|  
+  0.363 [1]	|  
+  0.422 [0]	|  
+  0.481 [20]	|  
+  0.540 [13]	|  
+  0.599 [12]	|  
+
+
+Latency distribution:  
+  10% in 0.0291 secs  
+  25% in 0.0419 secs  
+  50% in 0.0601 secs  
+  75% in 0.0788 secs  
+  90% in 0.1027 secs  
+  95% in 0.1216 secs  
+  99% in 0.1690 secs  
+
+Details (average, fastest, slowest):  
+  DNS+dialup:	0.0000 secs, 0.0084 secs, 0.5995 secs  
+  DNS-lookup:	0.0000 secs, 0.0000 secs, 0.0245 secs  
+  req write:	0.0000 secs, 0.0000 secs, 0.0154 secs  
+  resp wait:	0.0643 secs, 0.0083 secs, 0.5793 secs  
+  resp read:	0.0001 secs, -0.0000 secs, 0.0326 secs  
+
+Status code distribution:  
+  [200]	29804 responses  
+```
 
 
 

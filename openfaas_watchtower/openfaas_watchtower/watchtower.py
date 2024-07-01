@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # pylint: disable=logging-fstring-interpolation
 
 
-def run_hey(url, requests=3, concurrency=3):
+def run_hey(url, requests=1, concurrency=1):
     """Runs the hey check for latency of the function"""
     command = [
         "hey",
@@ -76,7 +76,7 @@ def run_hey(url, requests=3, concurrency=3):
         # return None
 
 
-def parse_output(stdout, requests=3):
+def parse_output(stdout, requests=1):
     """Parsing of the hey output"""
 
     patterns = {

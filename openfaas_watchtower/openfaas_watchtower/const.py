@@ -7,16 +7,16 @@ CHECK_FREQUENCY = 5
 URL = "http://localhost:8080/function/ftest"
 
 # Percentange of tolerance (%)
-TOLERANCE = 0.2
+TOLERANCE = 0.1
 
 # Target latency (ms)
-TARGET = 100
+TARGET = 75
 
 # Stabilization window scale up (rounds)
-SCALE_UP_ROUNDS = 2
+SCALE_UP_ROUNDS = 1
 
 # Stabilization window scale down (rounds)
-SCALE_DOWN_ROUNDS = 12
+SCALE_DOWN_ROUNDS = 6
 
 # Scale up replicas increment (%)
 SCALE_UP_INCREMENT = 0.2
