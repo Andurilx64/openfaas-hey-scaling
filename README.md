@@ -92,7 +92,8 @@ LOG_LEVEL = "DEBUG"
 
 ## Testing
 
-The software is tested with a simple custum function that returns the factiorial of a given number (named _ftest_), using the `python3-http-debian` template, from Openfaas template store.
+The software is tested with a simple custum function that returns the factiorial of a given number (named _ftest_), using the `python3-http-debian` template, from Openfaas template store.  
+The code of this function can be found in `openfaas_watchtower/ftest.py`.  
 
 To simulate some sort of load (quite heavt in this case), hey is used again (two distinct terminals run this generator):
 
