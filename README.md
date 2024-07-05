@@ -29,12 +29,12 @@ The strucure of the hey monitoring request is just like this:
 hey -n 1 -c 1 -H "Hey: hey" http://localhost:8080/function/<function-name>
 ```
 
-This may not reflect the real latency for the end-users, but could save a lot resources and not slow down too the user traffic, expecially if the monitoring is very fine-grained;
+This may not reflect the real latency for the end-users, but could save a lot resources and not slow down too much the user traffic, expecially if the monitoring is very fine-grained;
 if the function is over-invoked the latency of these hey calls will also increase, due to queuing, causing the watch tower to scale up the function. 
 
 ## Installation and Usage
 
-The software is managed by **poetry**, and all the dependecies are installed in a python virtual environment. To use the software, run this command from the main directory (where Makefile is located):
+The software is managed by **poetry** (make sure you have it installed on your machine), and all the dependecies are installed in a python virtual environment. To use the software, run this command from the main directory (where Makefile is located):
 
 ```bash
 make run
