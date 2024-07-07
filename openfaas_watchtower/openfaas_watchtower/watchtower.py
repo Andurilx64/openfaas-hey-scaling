@@ -54,8 +54,6 @@ def run_hey(url, requests=1, concurrency=1):
         str(concurrency),
         "-H",
         "Hey: hey",
-        "-t",
-        "3",
         url,
     ]
 
@@ -101,7 +99,11 @@ def parse_output(stdout, requests=1):
         return None
     if not num or int(num.group(1)) != requests:
         logger.warning("Some response not 200 ok")
-    return float(match.group(1))
+    try:
+        l = float(match.group(1))
+    except AttributeError:
+        return None
+    return l
 
 
 def get_replicas(deployment_name, namespace="openfaas-fn"):

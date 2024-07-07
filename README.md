@@ -192,5 +192,56 @@ Status code distribution:
   [200]	29804 responses  
 ```
 
+To simulate an arbitrary long or short lived function one can use the `openfaas_watchtower/sleepy.py` function template. For example, generating a load for a function with execution time of 0.75 seconds can be done with:
+
+```bash
+hey -n 300 -c 10 -q 2 http://localhost:8080/function/sleepy?number=0.75
+```
+
+The watchtower autoscaler provided in this project can be tuned to adapt also to work with such slow function (like _sleepy_), with an average latency time very similar to the execution time of the fucntion.
+
+```text
+
+Summary:
+  Total:	32.5851 secs
+  Slowest:	2.3274 secs
+  Fastest:	0.7607 secs
+  Average:	1.0469 secs
+  Requests/sec:	9.2067
+  
+  Total data:	7800 bytes
+  Size/request:	26 bytes
+
+Response time histogram:
+  0.761 [1]	|
+  0.917 [215]	|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  1.074 [0]	|
+  1.231 [0]	|
+  1.387 [4]	|■
+  1.544 [46]	|■■■■■■■■■
+  1.701 [6]	|■
+  1.857 [0]	|
+  2.014 [0]	|
+  2.171 [0]	|
+  2.327 [28]	|■■■■■
 
 
+Latency distribution:
+  10% in 0.7640 secs
+  25% in 0.7669 secs
+  50% in 0.7727 secs
+  75% in 1.4286 secs
+  90% in 1.5959 secs
+  95% in 2.2354 secs
+  99% in 2.2564 secs
+
+Details (average, fastest, slowest):
+  DNS+dialup:	0.0001 secs, 0.7607 secs, 2.3274 secs
+  DNS-lookup:	0.0000 secs, 0.0000 secs, 0.0011 secs
+  req write:	0.0000 secs, 0.0000 secs, 0.0016 secs
+  resp wait:	1.0466 secs, 0.7606 secs, 2.3249 secs
+  resp read:	0.0001 secs, 0.0000 secs, 0.0027 secs
+
+Status code distribution:
+  [200]	300 responses
+```
