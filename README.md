@@ -13,11 +13,6 @@ kubectl scale deployment alertmanager --replicas=0 -n openfaas
 
 **Note**: scale out the alert manager stop the alarming service for all the Openfaas functions, not just the one monitored by the watch tower, be careful.  
 
-With super-fast functions, scale up the number of replicas of the fucntion usually does not lead to a reduced latency: this is due to  a race condition. Scale up the OpenFaas Queue Worker is recommended:
-
-```bash
-kubectl scale deployment queue-worker --replicas=2 -n openfaas
-```
 
 To avoid that every invocation of the funtion for monitoring purpose is too much expensive, use this pattern:
 

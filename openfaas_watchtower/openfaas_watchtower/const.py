@@ -1,6 +1,6 @@
 """Definitions of the constants used by the watch tower"""
 
-# Frequency of the checks with hey
+# Frequency of the checks with hey (seconds)
 CHECK_FREQUENCY = 5
 
 # Endpoint url of the openfaas function
@@ -18,10 +18,10 @@ SCALE_UP_ROUNDS = 1
 # Stabilization window scale down (rounds)
 SCALE_DOWN_ROUNDS = 6
 
-# Scale up replicas increment (%)
+# Scale up replicas increment (%, or 'auto')
 SCALE_UP_INCREMENT = 0.2
 
-# Scale down replicas increment (%)
+# Scale down replicas increment (%, or 'auto')
 SCALE_DOWN_INCREMENT = 1.0
 
 # Function name

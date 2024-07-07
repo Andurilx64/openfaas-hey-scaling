@@ -31,6 +31,9 @@ LOG_MAPPING = {
     "CRITICAL": logging.CRITICAL,
 }
 
+TARGET_DOWN = (TARGET - (TARGET * TOLERANCE)) / 1000
+TARGET_UP = (TARGET + (TARGET * TOLERANCE)) / 1000
+
 queue = Queue()
 deq = deque(maxlen=max(SCALE_DOWN_ROUNDS, SCALE_UP_ROUNDS))
 logging.basicConfig(
@@ -156,25 +159,23 @@ def run_fetch_thread():
 def check_latency(data: dict):
     """Check latency under the target"""
 
-    target_down = (TARGET - (TARGET * TOLERANCE)) / 1000
-    target_up = (TARGET + (TARGET * TOLERANCE)) / 1000
     counter_up = 0
     counter_down = 0
     msg = "Nothing to do"
-    if data["latency"] < target_down:
+    if data["latency"] < TARGET_DOWN:
         counter_down = data["counter_down"] + 1
         if counter_down >= SCALE_DOWN_ROUNDS:
-            scaled = try_scale_down()
+            scaled = try_scale_down(data["latency"])
             if scaled:
                 msg = "Scaled down"
                 counter_up = 0
                 counter_down = 0
             else:
                 msg = "Fail to scale down"
-    elif data["latency"] > target_up:
+    elif data["latency"] > TARGET_UP:
         counter_up = data["counter_up"] + 1
         if counter_up >= SCALE_UP_ROUNDS:
-            scaled = try_scale_up()
+            scaled = try_scale_up(data["latency"])
             if scaled:
                 msg = "Scaled up"
                 counter_up = 0
@@ -188,7 +189,7 @@ def check_latency(data: dict):
     return (counter_up, counter_down)
 
 
-def try_scale_down():
+def try_scale_down(latency: int):
     """Tries to scale down replicas with kubectl"""
 
     replicas = get_replicas(NAME)
@@ -196,7 +197,7 @@ def try_scale_down():
         # can't zero scaling in openfaas community-edition!
         return False
 
-    req_replicas = scale_down_repl_calc(replicas)
+    req_replicas = scale_down_repl_calc(replicas, latency)
     req_replicas_str = "--replicas=" + str(req_replicas)
     deployment = "deployment/" + NAME
     cmd = ["kubectl", "scale", req_replicas_str, deployment, "-n", "openfaas-fn"]
@@ -215,7 +216,7 @@ def try_scale_down():
     return True
 
 
-def try_scale_up():
+def try_scale_up(latency: int):
     """Tries to scale up replicas with kubectl"""
 
     replicas = get_replicas(NAME)
@@ -223,7 +224,7 @@ def try_scale_up():
         # can't scale over 5 in openfaas community-edition!
         return False
 
-    req_replicas = scale_up_repl_calc(replicas)
+    req_replicas = scale_up_repl_calc(replicas, latency)
     req_replicas_str = "--replicas=" + str(req_replicas)
     deployment = "deployment/" + NAME
     cmd = ["kubectl", "scale", req_replicas_str, deployment, "-n", "openfaas-fn"]
@@ -242,19 +243,78 @@ def try_scale_up():
     return True
 
 
-def scale_down_repl_calc(current_repl: int):
+def scale_down_repl_calc(current_repl: int, latency: int):
     """Calculates the number of replicas required"""
 
-    next_repl = ceil(current_repl - (current_repl * SCALE_DOWN_INCREMENT))
+    if SCALE_DOWN_INCREMENT == "auto":
+        next_repl = ceil(current_repl * (latency / (TARGET / 1000)))
+    else:
+        next_repl = ceil(current_repl - (current_repl * SCALE_DOWN_INCREMENT))
     if next_repl < 1:
         return 1
     return next_repl
 
 
-def scale_up_repl_calc(current_repl: int):
+def scale_up_repl_calc(current_repl: int, latency: int):
     """Calculates the number of replicas required"""
 
-    next_repl = ceil(current_repl + (current_repl * SCALE_UP_INCREMENT))
+    if SCALE_UP_INCREMENT == "auto":
+        next_repl = ceil(current_repl * (latency / (TARGET / 1000)))
+    else:
+        next_repl = ceil(current_repl + (current_repl * SCALE_UP_INCREMENT))
     if next_repl > 5:
         return 5
     return next_repl
+
+
+def check_configuration():
+    """Checks the conf.py configuration is ok"""
+
+    ok: bool = True
+    if not isinstance(CHECK_FREQUENCY, int) or not isinstance(TARGET, int):
+        ok = False
+        logger.error("CHECK_FREQUENCY and TARGET has to be integers")
+    if (
+        not isinstance(URL, str)
+        or not isinstance(NAME, str)
+        or not isinstance(LOG_LEVEL, str)
+    ):
+        ok = False
+        logger.error("URL, NAME, LOG_LEVEL have to be strings")
+    if not (is_perc(SCALE_DOWN_INCREMENT) or SCALE_DOWN_INCREMENT == "auto"):
+        ok = False
+        logger.error(
+            "SCALE_DOWN_INCREMENT has to be a float between 0.0 and 1.0, or 'auto'"
+        )
+    if not (is_perc(SCALE_UP_INCREMENT) or SCALE_UP_INCREMENT == "auto"):
+        ok = False
+        logger.error(
+            "SCALE_UP_INCREMENT has to be a float between 0.0 and 1.0, or 'auto'"
+        )
+    if not is_perc(TOLERANCE):
+        ok = False
+        logger.error("TOLERANCE has to be a float between 0.0 and 1.0")
+    if not isinstance(SCALE_UP_ROUNDS, int) or not isinstance(SCALE_DOWN_ROUNDS, int):
+        ok = False
+        logger.error("SCALE_UP_ROUNDS and SCALE_DOWN_ROUNDS have to be integers")
+    if ok and (
+        URL.split("/", maxsplit=-1)[-1] != NAME
+        or URL.split("/", maxsplit=-1)[-2] != "function"
+    ):
+        ok = False
+        logger.error("Function name cannot correspond to the provided url")
+    if not ok:
+        logger.critical("Error in conf.py configuration file")
+    if ok:
+        logger.info("Configuration check completed.")
+    return ok
+
+
+def is_perc(test):
+    """Checks if the input is an int in percentage form"""
+
+    if not isinstance(test, (float, int)):
+        return False
+    if not 0.0 <= test <= 1.0:
+        return False
+    return True
