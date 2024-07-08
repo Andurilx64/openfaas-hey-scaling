@@ -13,6 +13,7 @@ kubectl scale deployment alertmanager --replicas=0 -n openfaas
 
 **Note**: scale out the alert manager stop the alarming service for all the Openfaas functions, not just the one monitored by the watch tower, be careful.  
 
+Obviously, make sure that no Kubernetes HPA (Horizontal Pod Autoscaler) is active on the function Deployment, again to avoid any conflicts with this watch tower.  
 
 To avoid that every invocation of the funtion for monitoring purpose is too much expensive, use this pattern:
 
@@ -47,14 +48,14 @@ This software is meant to be highly configurable. To change the configuration, e
 6. **TOLERANCE**: percentage of tolerance for the target value;
 7. **SCALE_UP_ROUNDS**: how many consecutive rounds wait for upscaling the function, i.e. number of consecutive hey requests with latency > target;
 8. **SCALE_DOWN_ROUNDS**: how many consecutive rounds wait for downscaling the function, i.e. number of consecutive hey requests with latency < target;
-9. **SCALE_UP_INCREMENT**: percentage increase of the number of replicas when scale up;
-10. **SCALE_DOWN_INCREMENT**: percentage decrease of the number of replicas when scale down.
+9. **SCALE_UP_INCREMENT**: percentage increase of the number of replicas when scale up, can be set to 'auto' to automatically calculate the desired replicas based on the latest latency value;
+10. **SCALE_DOWN_INCREMENT**: percentage decrease of the number of replicas when scale down, can be set to 'auto' to automatically calculate the desired replicas based on the latest latency value.
 
 An example of a full configuration:
 ```python
 """Definitions of the constants used by the watch tower"""
 
-# Frequency of the checks with hey
+# Frequency of the checks with hey (seconds)
 CHECK_FREQUENCY = 5
 
 # Endpoint url of the openfaas function
@@ -72,10 +73,10 @@ SCALE_UP_ROUNDS = 2
 # Stabilization window scale down (rounds)
 SCALE_DOWN_ROUNDS = 12
 
-# Scale up replicas increment (%)
-SCALE_UP_INCREMENT = 0.2
+# Scale up replicas increment (%, or 'auto')
+SCALE_UP_INCREMENT = "auto"
 
-# Scale down replicas increment (%)
+# Scale down replicas increment (%, or 'auto')
 SCALE_DOWN_INCREMENT = 1.0
 
 # Function name
@@ -90,7 +91,7 @@ LOG_LEVEL = "DEBUG"
 The software is tested with a simple custum function that returns the factiorial of a given number (named _ftest_), using the `python3-http-debian` template, from Openfaas template store.  
 The code of this function can be found in `openfaas_watchtower/ftest.py`.  
 
-To simulate some sort of load (quite heavt in this case), hey is used again (two distinct terminals run this generator):
+To simulate some sort of load (quite heavy in this case), hey is used again (two distinct terminals run this generator):
 
 ```bash
 hey -z 2m -c 50 -q 5  http://localhost:8080/function/ftest?number=50
